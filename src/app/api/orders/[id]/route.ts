@@ -28,6 +28,22 @@ export async function GET(
 
     // Direct Object Reference without authorization check against order.user_id
     const order = db.getOrderById(id);
+    
+
+
+if (!order) {
+  return NextResponse.json(
+    { error: "Order not found" },
+    { status: 404, headers: createCorsHeaders() }
+  );
+}
+
+if (order.user_id !== currentUser.id) {
+  return NextResponse.json(
+    { error: "Forbidden" },
+    { status: 403, headers: createCorsHeaders() }
+  );
+}
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404, headers: createCorsHeaders() });
