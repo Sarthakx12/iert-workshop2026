@@ -1,10 +1,13 @@
+
 import fs from "fs";
 import path from "path";
+import { randomBytes } from "crypto";
+import bcrypt from "bcryptjs";
 
 export interface User {
   id: string;
   email: string;
-  password: string;
+  passwordHash: string;
   name: string;
   role: "user" | "admin";
   credits: number;
@@ -43,24 +46,39 @@ export interface Coupon {
   redeemed_by: string[];
 }
 
+export interface Session {
+  token: string;
+  user_id: string;
+  created_at: number;
+  expires_at: number;
+}
+
 export interface DbSchema {
   users: User[];
   orders: Order[];
   notes: Note[];
   comments: Comment[];
   coupons: Coupon[];
-  sessions: { token: string; user_id: string; created_at: number }[];
+  sessions: Session[];
 }
 
-const DB_FILE_PATH = path.join(process.cwd(), "data", "local-db.json");
+const DB_FILE_PATH = path.join(
+  process.cwd(),
+  "data",
+  "local-db.json"
+);
 
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const BCRYPT_ROUNDS = 12;
+
+// Default demonstration data
 function getDefaultData(): DbSchema {
   return {
     users: [
       {
         id: "user-a-1111",
         email: "usera@example.com",
-        password: "Password123!",
+        passwordHash: bcrypt.hashSync("Password123!", BCRYPT_ROUNDS),
         name: "User A",
         role: "user",
         credits: 0,
@@ -68,7 +86,7 @@ function getDefaultData(): DbSchema {
       {
         id: "user-b-2222",
         email: "userb@example.com",
-        password: "Password123!",
+        passwordHash: bcrypt.hashSync("Password123!", BCRYPT_ROUNDS),
         name: "User B",
         role: "user",
         credits: 0,
@@ -76,12 +94,13 @@ function getDefaultData(): DbSchema {
       {
         id: "admin-3333",
         email: "admin@example.com",
-        password: "Admin123!",
+        passwordHash: bcrypt.hashSync("Admin123!", BCRYPT_ROUNDS),
         name: "Admin User",
         role: "admin",
         credits: 1000,
       },
     ],
+
     orders: [
       {
         id: "ORD-101",
@@ -97,7 +116,7 @@ function getDefaultData(): DbSchema {
         user_id: "user-a-1111",
         user_email: "usera@example.com",
         item: "Enterprise Vector Indexer",
-        amount: 199.0,
+        amount: 199,
         status: "processing",
         created_at: "2026-01-15T09:15:00Z",
       },
@@ -106,7 +125,7 @@ function getDefaultData(): DbSchema {
         user_id: "user-b-2222",
         user_email: "userb@example.com",
         item: "Automated Payroll Engine",
-        amount: 850.0,
+        amount: 850,
         status: "completed",
         created_at: "2026-01-12T11:45:00Z",
       },
@@ -115,11 +134,12 @@ function getDefaultData(): DbSchema {
         user_id: "user-b-2222",
         user_email: "userb@example.com",
         item: "Confidential B2B License",
-        amount: 1200.0,
+        amount: 1200,
         status: "active",
         created_at: "2026-01-18T16:30:00Z",
       },
     ],
+
     notes: [
       {
         id: "note-1",
@@ -132,10 +152,11 @@ function getDefaultData(): DbSchema {
         id: "note-2",
         user_id: "user-b-2222",
         title: "Payout Secret",
-        content: "CONFIDENTIAL: User B payout secret PIN 9482",
+        content: "CONFIDENTIAL: User B payout secret",
         is_private: true,
       },
     ],
+
     comments: [
       {
         id: "comm-1",
@@ -144,6 +165,7 @@ function getDefaultData(): DbSchema {
         created_at: "2026-01-01T10:00:00.000Z",
       },
     ],
+
     coupons: [
       {
         code: "PRO50",
@@ -153,42 +175,115 @@ function getDefaultData(): DbSchema {
         redeemed_by: [],
       },
     ],
+
     sessions: [],
   };
 }
 
-// In-memory cache synced to disk
+// Migrate existing plaintext passwords to bcrypt hashes.
+// This also supports older session records.
+function migrateData(raw: Partial<DbSchema>): DbSchema {
+  const defaults = getDefaultData();
+  const source = raw as Record<string, any>;
+
+  const users: User[] = Array.isArray(source.users)
+    ? source.users.map((user: Record<string, any>) => {
+        let passwordHash = user.passwordHash;
+
+        if (!passwordHash && typeof user.password === "string") {
+          passwordHash = bcrypt.hashSync(
+            user.password,
+            BCRYPT_ROUNDS
+          );
+        }
+
+        const { password: _legacyPassword, ...safeUser } = user;
+
+        return {
+          ...safeUser,
+          passwordHash,
+        } as User;
+      })
+    : defaults.users;
+
+ 
+const sessions: Session[] = Array.isArray(source.sessions)
+  ? source.sessions.map(
+      (session: Record<string, any>): Session => {
+        const createdAt =
+          typeof session.created_at === "number"
+            ? session.created_at
+            : Date.now();
+
+        return {
+          token: String(session.token ?? ""),
+          user_id: String(session.user_id ?? ""),
+          created_at: createdAt,
+          expires_at:
+            typeof session.expires_at === "number"
+              ? session.expires_at
+              : createdAt + SESSION_TTL_MS,
+        };
+      }
+    )
+  : [];
+
+
+  return {
+    ...defaults,
+    ...source,
+    users,
+    sessions,
+    orders: Array.isArray(source.orders) ? source.orders : defaults.orders,
+    notes: Array.isArray(source.notes) ? source.notes : defaults.notes,
+    comments: Array.isArray(source.comments) ? source.comments : defaults.comments,
+    coupons: Array.isArray(source.coupons) ? source.coupons : defaults.coupons,
+  };
+}
+
+// In-memory cache
 let inMemoryData: DbSchema | null = null;
 
 function loadData(): DbSchema {
   if (inMemoryData) {
     return inMemoryData;
   }
+
   try {
     if (fs.existsSync(DB_FILE_PATH)) {
       const raw = fs.readFileSync(DB_FILE_PATH, "utf-8");
-      inMemoryData = JSON.parse(raw);
-      return inMemoryData!;
+      const parsed = JSON.parse(raw);
+
+      inMemoryData = migrateData(parsed);
+
+      // Persist the migration
+      saveData(inMemoryData);
+
+      return inMemoryData;
     }
-  } catch {
-    // fallback to default
+  } catch (error) {
+    console.error("Database loading failed:", error);
+    throw new Error("Unable to load database");
   }
+
   inMemoryData = getDefaultData();
   saveData(inMemoryData);
+
   return inMemoryData;
 }
 
 function saveData(data: DbSchema): void {
   inMemoryData = data;
-  try {
-    const dir = path.dirname(DB_FILE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
-  } catch {
-    // ignore
-  }
+
+  const dir = path.dirname(DB_FILE_PATH);
+
+  fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(
+    DB_FILE_PATH,
+    JSON.stringify(data, null, 2),
+    "utf-8"
+  );
 }
 
 export const db = {
@@ -199,12 +294,15 @@ export const db = {
 
   getUserByEmail(email: string): User | undefined {
     const data = loadData();
-    return data.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+    return data.users.find(
+      (user) => user.email.toLowerCase() === email.toLowerCase()
+    );
   },
 
   getUserById(id: string): User | undefined {
     const data = loadData();
-    return data.users.find((u) => u.id === id);
+    return data.users.find((user) => user.id === id);
   },
 
   getAllUsers(): User[] {
@@ -212,43 +310,96 @@ export const db = {
     return data.users;
   },
 
-  updateUser(id: string, updates: Partial<User>): User | undefined {
+  updateUser(
+    id: string,
+    updates: Partial<User>
+  ): User | undefined {
     const data = loadData();
-    const idx = data.users.findIndex((u) => u.id === id);
-    if (idx === -1) return undefined;
-    data.users[idx] = { ...data.users[idx], ...updates };
+
+    const index = data.users.findIndex((user) => user.id === id);
+
+    if (index === -1) return undefined;
+
+    data.users[index] = {
+      ...data.users[index],
+      ...updates,
+    };
+
     saveData(data);
-    return data.users[idx];
+
+    return data.users[index];
   },
 
   createSession(userId: string): string {
     const data = loadData();
-    const token = "fv_sess_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+    const userExists = data.users.some((user) => user.id === userId);
+
+    if (!userExists) {
+      throw new Error("Cannot create session for unknown user");
+    }
+
+    // Remove expired sessions
+    data.sessions = data.sessions.filter(
+      (session) => session.expires_at > Date.now()
+    );
+
+    // Cryptographically secure session token
+    const token = randomBytes(32).toString("hex");
+
+    const now = Date.now();
+
     data.sessions.push({
       token,
       user_id: userId,
-      created_at: Date.now(),
+      created_at: now,
+      expires_at: now + SESSION_TTL_MS,
     });
+
     saveData(data);
+
     return token;
   },
 
   getUserBySession(token: string): User | undefined {
     if (!token) return undefined;
+
     const data = loadData();
-    const session = data.sessions.find((s) => s.token === token);
+
+    const session = data.sessions.find(
+      (item) =>
+        item.token === token &&
+        item.expires_at > Date.now()
+    );
+
     if (!session) return undefined;
-    return data.users.find((u) => u.id === session.user_id);
+
+    return data.users.find(
+      (user) => user.id === session.user_id
+    );
+  },
+
+  revokeSession(token: string): void {
+    const data = loadData();
+
+    data.sessions = data.sessions.filter(
+      (session) => session.token !== token
+    );
+
+    saveData(data);
   },
 
   getOrderById(id: string): Order | undefined {
     const data = loadData();
-    return data.orders.find((o) => o.id === id);
+    return data.orders.find((order) => order.id === id);
   },
 
   getOrdersByUserId(userId: string): Order[] {
     const data = loadData();
-    return data.orders.filter((o) => o.user_id === userId);
+
+    return data.orders.filter(
+      (order) => order.user_id === userId
+    );
   },
 
   getAllOrders(): Order[] {
@@ -258,7 +409,10 @@ export const db = {
 
   getNotesByUserId(userId: string): Note[] {
     const data = loadData();
-    return data.notes.filter((n) => n.user_id === userId);
+
+    return data.notes.filter(
+      (note) => note.user_id === userId
+    );
   },
 
   getAllNotes(): Note[] {
@@ -273,36 +427,75 @@ export const db = {
 
   addComment(authorName: string, body: string): Comment {
     const data = loadData();
+
     const newComment: Comment = {
-      id: "comm-" + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      id:
+        "comm-" +
+        Date.now().toString(36) +
+        randomBytes(4).toString("hex"),
       author_name: authorName,
       body,
       created_at: new Date().toISOString(),
     };
+
     data.comments.push(newComment);
     saveData(data);
+
     return newComment;
   },
 
   getCoupon(code: string): Coupon | undefined {
     const data = loadData();
-    return data.coupons.find((c) => c.code.toUpperCase() === code.toUpperCase());
+
+    return data.coupons.find(
+      (coupon) => coupon.code.toUpperCase() === code.toUpperCase()
+    );
   },
 
-  // Non-atomic increment for asynchronous demonstration
-  redeemCoupon(userId: string, code: string, discountCredits: number): { success: boolean; credits: number; coupon: Coupon } {
+  redeemCoupon(
+    userId: string,
+    code: string,
+    discountCredits: number
+  ): {
+    success: boolean;
+    credits: number;
+    coupon: Coupon;
+  } {
     const data = loadData();
-    const coupon = data.coupons.find((c) => c.code.toUpperCase() === code.toUpperCase());
-    const user = data.users.find((u) => u.id === userId);
+
+    const coupon = data.coupons.find(
+      (item) => item.code.toUpperCase() === code.toUpperCase()
+    );
+
+    const user = data.users.find(
+      (item) => item.id === userId
+    );
+
     if (!coupon || !user) {
       throw new Error("Invalid coupon or user");
     }
 
+    if (
+      coupon.used_count >= coupon.max_uses ||
+      coupon.redeemed_by.includes(userId)
+    ) {
+      throw new Error("Coupon is no longer available");
+    }
+
+    if (discountCredits !== coupon.discount_credits) {
+      throw new Error("Invalid coupon discount");
+    }
+
     coupon.used_count += 1;
     coupon.redeemed_by.push(userId);
-    user.credits += discountCredits;
+    user.credits += coupon.discount_credits;
 
     saveData(data);
-    return { success: true, credits: user.credits, coupon };
+
+    return {
+      success: true,
+      credits: user.credits,
+      coupon,
+    };
   },
 };
