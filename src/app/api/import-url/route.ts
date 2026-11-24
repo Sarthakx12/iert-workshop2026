@@ -1,46 +1,30 @@
 import { NextResponse } from "next/server";
+import { getRequestUser } from "@/lib/auth";
 import { createCorsHeaders } from "@/lib/helpers";
+import { safeFetchUrl } from "@/lib/safe-url";
 
 export async function POST(req: Request) {
+  if (!getRequestUser(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
+  let body: unknown;
   try {
-    const body = await req.json();
-    const { url } = body;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: createCorsHeaders() });
+  }
+  if (!body || typeof body !== "object" || !("url" in body) || typeof body.url !== "string" || body.url.length > 2048) {
+    return NextResponse.json({ error: "A valid URL is required" }, { status: 400, headers: createCorsHeaders() });
+  }
 
-    if (!url || typeof url !== "string") {
-      return NextResponse.json({ error: "Valid URL is required" }, { status: 400 });
-    }
-
-    // Server-Side Request Forgery (SSRF): Direct fetch with no IP check, no scheme restriction, redirects enabled
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "User-Agent": "FlowVault-Data-Importer/1.0",
-        Accept: "*/*",
-      },
-      redirect: "follow",
-    });
-
-    const contentType = response.headers.get("content-type") || "";
-    let content: string;
-    if (contentType.includes("application/json")) {
-      const json = await response.json();
-      content = JSON.stringify(json, null, 2);
-    } else {
-      content = await response.text();
-    }
-
+  try {
+    const result = await safeFetchUrl(body.url);
     return NextResponse.json(
-      {
-        url,
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        content,
-      },
+      { url: new URL(body.url).toString(), status: result.status, content_type: result.contentType, content: result.body },
       { headers: createCorsHeaders() }
     );
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Fetch failed";
-    return NextResponse.json({ error: "Failed to import from target URL", details: message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Import failed";
+    const status = message.includes("allowlist") || message.includes("Only credential-free") || message.includes("non-public") ? 400 : 502;
+    return NextResponse.json({ error: message }, { status, headers: createCorsHeaders() });
   }
 }
 

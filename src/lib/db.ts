@@ -1,5 +1,22 @@
 import fs from "fs";
 import path from "path";
+import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+
+const PASSWORD_KEY_LENGTH = 64;
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const key = scryptSync(password, salt, PASSWORD_KEY_LENGTH).toString("hex");
+  return `scrypt$${salt}$${key}`;
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  const [scheme, salt, expected] = stored.split("$");
+  if (scheme !== "scrypt" || !salt || !expected) return false;
+  const actual = scryptSync(password, salt, PASSWORD_KEY_LENGTH);
+  const expectedBytes = Buffer.from(expected, "hex");
+  return actual.length === expectedBytes.length && timingSafeEqual(actual, expectedBytes);
+}
 
 export interface User {
   id: string;
@@ -60,7 +77,7 @@ function getDefaultData(): DbSchema {
       {
         id: "user-a-1111",
         email: "usera@example.com",
-        password: "Password123!",
+        password: hashPassword("Password123!"),
         name: "User A",
         role: "user",
         credits: 0,
@@ -68,7 +85,7 @@ function getDefaultData(): DbSchema {
       {
         id: "user-b-2222",
         email: "userb@example.com",
-        password: "Password123!",
+        password: hashPassword("Password123!"),
         name: "User B",
         role: "user",
         credits: 0,
@@ -76,7 +93,7 @@ function getDefaultData(): DbSchema {
       {
         id: "admin-3333",
         email: "admin@example.com",
-        password: "Admin123!",
+        password: hashPassword("Admin123!"),
         name: "Admin User",
         role: "admin",
         credits: 1000,
@@ -168,6 +185,14 @@ function loadData(): DbSchema {
     if (fs.existsSync(DB_FILE_PATH)) {
       const raw = fs.readFileSync(DB_FILE_PATH, "utf-8");
       inMemoryData = JSON.parse(raw);
+      let migrated = false;
+      for (const user of inMemoryData!.users) {
+        if (!user.password.startsWith("scrypt$")) {
+          user.password = hashPassword(user.password);
+          migrated = true;
+        }
+      }
+      if (migrated) saveData(inMemoryData!);
       return inMemoryData!;
     }
   } catch {
@@ -202,9 +227,9 @@ export const db = {
     return data.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
   },
 
-  getUserById(id: string): User | undefined {
-    const data = loadData();
-    return data.users.find((u) => u.id === id);
+  verifyPassword(email: string, password: string): User | undefined {
+    const user = this.getUserByEmail(email);
+    return user && verifyPassword(password, user.password) ? user : undefined;
   },
 
   getAllUsers(): User[] {
@@ -223,7 +248,7 @@ export const db = {
 
   createSession(userId: string): string {
     const data = loadData();
-    const token = "fv_sess_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    const token = randomBytes(32).toString("base64url");
     data.sessions.push({
       token,
       user_id: userId,
@@ -238,7 +263,18 @@ export const db = {
     const data = loadData();
     const session = data.sessions.find((s) => s.token === token);
     if (!session) return undefined;
+    if (Date.now() - session.created_at > 8 * 60 * 60 * 1000) {
+      data.sessions = data.sessions.filter((entry) => entry.token !== token);
+      saveData(data);
+      return undefined;
+    }
     return data.users.find((u) => u.id === session.user_id);
+  },
+
+  deleteSession(token: string): void {
+    const data = loadData();
+    data.sessions = data.sessions.filter((session) => session.token !== token);
+    saveData(data);
   },
 
   getOrderById(id: string): Order | undefined {
@@ -251,19 +287,9 @@ export const db = {
     return data.orders.filter((o) => o.user_id === userId);
   },
 
-  getAllOrders(): Order[] {
-    const data = loadData();
-    return data.orders;
-  },
-
   getNotesByUserId(userId: string): Note[] {
     const data = loadData();
     return data.notes.filter((n) => n.user_id === userId);
-  },
-
-  getAllNotes(): Note[] {
-    const data = loadData();
-    return data.notes;
   },
 
   getComments(): Comment[] {
@@ -289,12 +315,11 @@ export const db = {
     return data.coupons.find((c) => c.code.toUpperCase() === code.toUpperCase());
   },
 
-  // Non-atomic increment for asynchronous demonstration
   redeemCoupon(userId: string, code: string, discountCredits: number): { success: boolean; credits: number; coupon: Coupon } {
     const data = loadData();
     const coupon = data.coupons.find((c) => c.code.toUpperCase() === code.toUpperCase());
     const user = data.users.find((u) => u.id === userId);
-    if (!coupon || !user) {
+    if (!coupon || !user || coupon.used_count >= coupon.max_uses || coupon.redeemed_by.includes(userId)) {
       throw new Error("Invalid coupon or user");
     }
 

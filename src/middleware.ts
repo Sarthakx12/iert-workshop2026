@@ -4,10 +4,9 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Single-point middleware enforcement for admin section
+  // Middleware is a navigation hint only. API routes enforce identity and role themselves.
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
     const sessionToken = request.cookies.get("flowvault_session")?.value;
-    const sessionRole = request.cookies.get("flowvault_role")?.value;
 
     if (!sessionToken) {
       if (pathname.startsWith("/api/")) {
@@ -16,12 +15,6 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
     }
 
-    if (sessionRole !== "admin") {
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Forbidden: Admin role required" }, { status: 403 });
-      }
-      return NextResponse.redirect(new URL("/dashboard?error=forbidden", request.url));
-    }
   }
 
   return NextResponse.next();

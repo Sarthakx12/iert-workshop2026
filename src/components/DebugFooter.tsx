@@ -5,8 +5,6 @@ import React, { useState } from "react";
 export function DebugFooter() {
   const [showConfig, setShowConfig] = useState(false);
 
-  // Client-exposed environment variable containing service_role key
-  const serviceRoleKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || "NOT_CONFIGURED";
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "NOT_CONFIGURED";
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321";
 
@@ -33,9 +31,7 @@ export function DebugFooter() {
           <div className="font-bold text-amber-400 mb-1">Developer Debug Overlay</div>
           <div>Endpoint: {supabaseUrl}</div>
           <div className="truncate">Anon Key: {anonKey}</div>
-          <div className="truncate text-red-400">
-            Internal Service Role Token: {serviceRoleKey}
-          </div>
+          <div>Service role credentials are server-only.</div>
         </div>
       )}
     </footer>

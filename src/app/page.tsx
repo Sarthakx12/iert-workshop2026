@@ -1,114 +1,74 @@
-import React from "react";
 import Link from "next/link";
+
+const features = [
+  { number: "01", title: "Keep work organised", text: "Review your orders and account activity from one clear workspace." },
+  { number: "02", title: "Share feedback safely", text: "Post comments that display as text, so markup cannot run in another user’s browser." },
+  { number: "03", title: "Know what the assistant can access", text: "The local assistant can retrieve notes for your account only." },
+];
 
 export default function HomePage() {
   return (
-    <div className="flex flex-col items-center justify-center text-center">
-      {/* Hero container */}
-      <section className="w-full py-28 px-4 bg-gradient-to-r from-purple-600 via-pink-600 to-red-500 text-white shadow-2xl relative overflow-hidden">
-        <div className="max-w-4xl mx-auto flex flex-col items-center space-y-6">
-          <div className="inline-flex items-center space-x-2 bg-white/20 px-4 py-1 rounded-full text-xs font-semibold backdrop-blur-sm tracking-wide">
-            <span>✨ REVOLUTIONIZING THE FUTURE OF HYBRID DATA FLOWS</span>
-          </div>
-
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
-            Elevate Your Workflow With Next-Gen Synergy
-          </h1>
-
-          {/* Subheader */}
-          <p className="text-lg md:text-xl text-purple-200/50 max-w-2xl font-light">
-            Harness the autonomous power of deterministic neural data loops to empower cross-functional teams at cloud scale.
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">
+      <section className="grid min-h-[560px] items-center gap-12 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:py-28">
+        <div className="max-w-2xl">
+          <p className="mb-5 inline-flex items-center rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-sm font-medium text-sky-200">
+            FlowVault · personal workspace
           </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-            <Link
-              href="/signup"
-              className="px-8 py-3.5 rounded-full bg-white text-purple-700 font-bold hover:bg-zinc-100 shadow-xl transition-all"
-            >
-              Get Started Free ⚡
+          <h1 className="text-4xl font-semibold leading-tight tracking-tight text-white sm:text-6xl">
+            Your work, kept in one clear place.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-300">
+            Check orders, manage account details and review your notes in a calm, focused workspace.
+          </p>
+          <div className="mt-9 flex flex-wrap gap-3">
+            <Link href="/login" className="inline-flex min-h-11 items-center rounded-lg bg-sky-500 px-5 font-semibold text-slate-950 transition-colors hover:bg-sky-400">
+              Sign in to FlowVault
             </Link>
-            <Link
-              href="/dashboard"
-              className="px-8 py-3.5 rounded-full bg-purple-900/40 border border-white/30 text-white font-medium hover:bg-purple-900/60 backdrop-blur-sm transition-all"
-            >
-              Live Demo
+            <Link href="/signup" className="inline-flex min-h-11 items-center rounded-lg border border-zinc-700 px-5 font-medium text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-900">
+              About workshop access
             </Link>
           </div>
+          <p className="mt-4 text-sm text-zinc-400">Workshop demo accounts are available on the sign-in page.</p>
         </div>
 
-        {/* Decorative background visual */}
-        <div className="w-full flex justify-center mt-8">
-          <svg
-            viewBox="0 0 1200 800"
-            className="w-full max-w-3xl opacity-80 animate-pulse pointer-events-none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="blobGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#c084fc" stopOpacity="0.8" />
-                <stop offset="50%" stopColor="#f472b6" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#fb7185" stopOpacity="0.4" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M300,150 C500,50 800,100 950,250 C1100,400 1000,650 850,700 C700,750 450,720 300,600 C150,480 100,250 300,150 Z"
-              fill="url(#blobGrad)"
-            />
-          </svg>
-        </div>
-      </section>
-
-      {/* Feature grid */}
-      <section className="max-w-6xl mx-auto py-20 px-4 w-full">
-        <h2 className="text-3xl font-bold mb-3">Enterprise Cloud Architecture</h2>
-        {/* Low contrast body text failing WCAG 4.5:1 ratio */}
-        <p className="low-contrast-slop mb-12 max-w-xl mx-auto text-sm">
-          Seamlessly orchestrate end-to-end mission-critical data pipelines through unified intelligence.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-          {/* Card 1 */}
-          <div className="p-8 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-lg flex flex-col items-center">
-            <div className="text-5xl mb-4">🚀</div>
-            <h3 className="text-xl font-bold mb-2">Instant Velocity</h3>
-            <p className="low-contrast-slop text-sm leading-relaxed">
-              Accelerate time-to-value with bleeding-edge micro-service synchronization and seamless paradigm integration.
-            </p>
+        <div aria-label="FlowVault workspace preview" className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-2xl shadow-sky-950/20 sm:p-7">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
+            <div>
+              <p className="text-sm font-medium text-zinc-300">Workspace overview</p>
+              <p className="mt-1 text-xs text-zinc-500">Your account at a glance</p>
+            </div>
+            <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">Local demo</span>
           </div>
-
-          {/* Card 2 */}
-          <div className="p-8 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-lg flex flex-col items-center">
-            <div className="text-5xl mb-4">⚡</div>
-            <h3 className="text-xl font-bold mb-2">Quantum Scaling</h3>
-            <p className="low-contrast-slop text-sm leading-relaxed">
-              Dynamically scale distributed computational workloads across high-throughput serverless nodes seamlessly.
-            </p>
+          <div className="grid grid-cols-2 gap-3 py-5">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-sm text-zinc-400">Orders</p><p className="mt-3 text-2xl font-semibold text-white">In one view</p>
+            </div>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+              <p className="text-sm text-zinc-400">Account data</p><p className="mt-3 text-2xl font-semibold text-white">Private by user</p>
+            </div>
           </div>
-
-          {/* Card 3 */}
-          <div className="p-8 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-lg flex flex-col items-center">
-            <div className="text-5xl mb-4">🤖</div>
-            <h3 className="text-xl font-bold mb-2">AI Synergy Matrix</h3>
-            <p className="low-contrast-slop text-sm leading-relaxed">
-              Leverage autonomous neural cognitive vectors to eliminate friction and maximize stakeholder alignment.
-            </p>
+          <div className="rounded-xl border border-sky-400/20 bg-sky-400/5 p-4">
+            <p className="text-sm font-medium text-sky-100">Built for a safer demo</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-300">The workshop uses simulated data and local services. Never enter real customer information.</p>
           </div>
         </div>
       </section>
 
-      {/* Bottom CTA Banner */}
-      <section className="w-full py-16 bg-zinc-900/50 border-t border-zinc-800 px-4 text-center">
-        <h2 className="text-2xl font-bold mb-2">Ready to transform your enterprise flow?</h2>
-        <p className="low-contrast-slop text-sm mb-6">
-          Start your 14-day zero-friction trial today. No credit card required.
-        </p>
-        <Link
-          href="/signup"
-          className="inline-block px-8 py-3 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:opacity-90 transition-opacity"
-        >
-          Create Free Account 🚀
-        </Link>
+      <section aria-labelledby="features-heading" className="border-t border-zinc-800 py-16 sm:py-20">
+        <div className="max-w-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-sky-300">A practical workspace</p>
+          <h2 id="features-heading" className="mt-3 text-3xl font-semibold tracking-tight text-white">Useful tools, with sensible boundaries.</h2>
+        </div>
+        <div className="mt-9 grid gap-4 md:grid-cols-3">
+          {features.map((feature) => (
+            <article key={feature.number} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
+              <p className="font-mono text-sm text-sky-300">{feature.number}</p>
+              <h3 className="mt-5 text-lg font-semibold text-white">{feature.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-300">{feature.text}</p>
+            </article>
+          ))}
+        </div>
       </section>
-    </div>
+    </main>
   );
 }

@@ -4,13 +4,17 @@ import { createCorsHeaders } from "@/lib/helpers";
 
 export async function POST(req: Request) {
   try {
-    // Unvalidated raw payload extraction (no Zod validation)
-    const body = await req.json();
-    const { email, password } = body;
+    const body: unknown = await req.json();
+    if (!body || typeof body !== "object" || !("email" in body) || !("password" in body)) {
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+    }
+    const { email, password } = body as { email: unknown; password: unknown };
+    if (typeof email !== "string" || typeof password !== "string" || email.length > 254 || password.length > 256) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 400 });
+    }
 
-    const user = db.getUserByEmail(email);
-
-    if (!user || user.password !== password) {
+    const user = db.verifyPassword(email, password);
+    if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401, headers: createCorsHeaders() }
@@ -19,13 +23,9 @@ export async function POST(req: Request) {
 
     const token = db.createSession(user.id);
 
-    // Logging raw authentication credentials & session tokens to console
-    console.log("DEBUG SESSION TOKEN:", token, "FOR USER:", user.email);
-
     const response = NextResponse.json(
       {
         message: "Authentication successful",
-        token,
         user: {
           id: user.id,
           email: user.email,
@@ -40,24 +40,15 @@ export async function POST(req: Request) {
     // Set session cookies
     response.cookies.set("flowvault_session", token, {
       path: "/",
-      httpOnly: false, // Insecurely exposed to client JS
+      httpOnly: true,
       sameSite: "lax",
-    });
-    response.cookies.set("flowvault_role", user.role, {
-      path: "/",
-      httpOnly: false,
-      sameSite: "lax",
-    });
-    response.cookies.set("flowvault_user_id", user.id, {
-      path: "/",
-      httpOnly: false,
-      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 8,
     });
 
     return response;
   } catch {
-    // Silent error swallowing pattern
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 }
 
