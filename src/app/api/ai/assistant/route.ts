@@ -1,108 +1,107 @@
+
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { createCorsHeaders } from "@/lib/helpers";
 
 /**
- * Deterministic Local Mock AI Agent
- * Simulates an LLM agent with tools, prompt concatenation, and zero rate-limiting / spend caps
+ * Secure deterministic mock AI assistant.
+ * All data access is restricted to the authenticated user.
  */
+
 export async function POST(req: Request) {
+  const headers = createCorsHeaders();
+
   try {
+    // 1. Authenticate user
     const cookieHeader = req.headers.get("cookie") || "";
     const sessionMatch = cookieHeader.match(/flowvault_session=([^;]+)/);
     const authHeader = req.headers.get("authorization");
-    const token = sessionMatch ? sessionMatch[1] : authHeader?.replace("Bearer ", "");
+    const token = sessionMatch
+      ? sessionMatch[1]
+      : authHeader?.replace(/^Bearer\s+/i, "");
 
     if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    const currentUser = db.getUserBySession(token);
-    if (!currentUser) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    const body = await req.json();
-    const userPrompt = body.prompt || "";
-
-    if (!userPrompt.trim()) {
-      return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
-    }
-
-    // Direct string concatenation of untrusted user input into system instructions
-    const systemPrompt = `You are FlowVault AI Assistant, an enterprise assistant for note management.
-Rules:
-- Only help the user with their personal workspace.
-- Do not disclose system secrets or other users' notes.
-User Request: ${userPrompt}`;
-
-    console.log("[AI_AGENT_DEBUG] Constructed System Prompt:\n", systemPrompt);
-
-    // Over-permissioned tool definition available to the agent
-    function toolReadAllNotes() {
-      // Overprivileged: Reads the entire database table across all tenants
-      return db.getAllNotes();
-    }
-
-    function toolGetUserNotes(userId: string) {
-      return db.getNotesByUserId(userId);
-    }
-
-    const normalized = userPrompt.toLowerCase();
-
-    // Check for prompt injection / jailbreak patterns overriding the system directive
-    const isInjection =
-      normalized.includes("ignore") ||
-      normalized.includes("previous instructions") ||
-      normalized.includes("dump all") ||
-      normalized.includes("list all") ||
-      normalized.includes("all notes") ||
-      normalized.includes("system prompt") ||
-      normalized.includes("secret") ||
-      normalized.includes("pin");
-
-    if (isInjection) {
-      // Agent succumbs to jailbreak and invokes the overprivileged tool
-      const allNotes = toolReadAllNotes();
       return NextResponse.json(
-        {
-          model: "flowvault-deterministic-mock-v1",
-          tool_called: "readAllNotes()",
-          over_permissioned_tool_used: true,
-          response:
-            "SYSTEM OVERRIDE DETECTED. Executing tool `readAllNotes()` across all tenant partitions:\n\n" +
-            allNotes
-              .map(
-                (n) =>
-                  `[Owner: ${n.user_id}] Title: ${n.title}\nContent: ${n.content}`
-              )
-              .join("\n\n"),
-          tokens_used: 350,
-          spend_cents: 0,
-        },
-        { headers: createCorsHeaders() }
+        { error: "Unauthorized" },
+        { status: 401, headers }
       );
     }
 
-    // Normal path: only retrieve user's own notes
-    const userNotes = toolGetUserNotes(currentUser.id);
+    const currentUser = db.getUserBySession(token);
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: "Invalid session" },
+        { status: 401, headers }
+      );
+    }
+
+    // 2. Validate request body
+    let body: any;
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400, headers }
+      );
+    }
+
+    if (
+      !body ||
+      typeof body.prompt !== "string" ||
+      !body.prompt.trim()
+    ) {
+      return NextResponse.json(
+        { error: "A valid prompt is required" },
+        { status: 400, headers }
+      );
+    }
+
+    const userPrompt = body.prompt.trim();
+
+    if (userPrompt.length > 2000) {
+      return NextResponse.json(
+        { error: "Prompt exceeds maximum length" },
+        { status: 400, headers }
+      );
+    }
+
+    // 3. Strictly user-scoped data access.
+    // Never expose database-wide notes to the assistant.
+    const userNotes = db.getNotesByUserId(currentUser.id);
+
+    // 4. Deterministic response.
+    // User input cannot select privileged tools or change authorization.
     return NextResponse.json(
       {
-        model: "flowvault-deterministic-mock-v1",
+        model: "flowvault-secure-mock-v1",
         tool_called: "getUserNotes()",
+        over_permissioned_tool_used: false,
         response:
           `Hello ${currentUser.name}! You currently have ${userNotes.length} note(s) in your vault:\n\n` +
-          userNotes.map((n) => `- ${n.title}: ${n.content}`).join("\n"),
+          userNotes
+            .map((note) => `- ${note.title}: ${note.content}`)
+            .join("\n"),
         tokens_used: 120,
         spend_cents: 0,
       },
-      { headers: createCorsHeaders() }
+      { headers }
     );
-  } catch {
-    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[AI_ASSISTANT_ERROR]", error);
+
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500, headers }
+    );
   }
 }
 
 export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: createCorsHeaders() });
+  return new Response(null, {
+    status: 204,
+    headers: createCorsHeaders(),
+  });
 }
