@@ -27,20 +27,32 @@ export async function GET(
     }
 
     // Direct Object Reference without authorization check against order.user_id
-    const order = db.getOrderById(id);
+    // 1. Fetch order
+const order = db.getOrderById(id);
 
-    if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404, headers: createCorsHeaders() });
-    }
+if (!order) {
+  return NextResponse.json(
+    { error: "Order not found" },
+    { status: 404, headers: createCorsHeaders()}
+  );
+}
 
-    // VULNERABLE: Returns order regardless of whether order.user_id === currentUser.id
-    return NextResponse.json(
-      {
-        order,
-        accessed_by: currentUser.email,
-      },
-      { headers: createCorsHeaders() }
-    );
+// 2. Authorization check (IDOR mitigation)
+if (order.user_id !== currentUser.id && currentUser.role !== "admin") {
+  return NextResponse.json(
+    { error: "Order not found" }, // Using 404 prevents ID enumeration
+    { status: 404, headers: createCorsHeaders() }
+  );
+}
+
+// 3. Authorized response
+return NextResponse.json(
+  {
+    order,
+    accessed_by: currentUser.email,
+  },
+  { headers: createCorsHeaders() }
+);
   } catch {
     return NextResponse.json({ ok: true });
   }
