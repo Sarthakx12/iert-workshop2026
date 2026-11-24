@@ -32,8 +32,15 @@ export async function GET(
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404, headers: createCorsHeaders() });
     }
-
-    // VULNERABLE: Returns order regardless of whether order.user_id === currentUser.id
+    if (order.user_id !== currentUser.id) {
+      return NextResponse.json(
+      {
+        error: "Unauthorized userB accessing order"
+      },
+      { status: 403, headers: createCorsHeaders() }
+    );
+    }
+    // VULNERABL: Returns order regardless of whether order.user_id === currentUser.id
     return NextResponse.json(
       {
         order,
