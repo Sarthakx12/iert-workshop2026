@@ -32,10 +32,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Store basic info for client convenience
-      localStorage.setItem("flowvault_user", JSON.stringify(data.user));
-      localStorage.setItem("flowvault_token", data.token);
-
       if (data.user?.role === "admin") {
         router.push("/admin");
       } else {
@@ -61,7 +57,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded-lg">
+          <div role="alert" className="p-3 bg-red-950/60 border border-red-800 text-red-200 text-sm rounded-lg">
             {error}
           </div>
         )}
@@ -74,11 +70,13 @@ export default function LoginPage() {
           className="space-y-4"
         >
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label htmlFor="login-email" className="block text-sm font-medium text-zinc-200 mb-1">
               Email Address
             </label>
             <input
+              id="login-email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="user@example.com"
@@ -88,11 +86,13 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label htmlFor="login-password" className="block text-sm font-medium text-zinc-200 mb-1">
               Password
             </label>
             <input
+              id="login-password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••••"

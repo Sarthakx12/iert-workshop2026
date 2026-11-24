@@ -1,65 +1,37 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getRequestUser } from "@/lib/auth";
 import { createCorsHeaders } from "@/lib/helpers";
 
 export async function GET(req: Request) {
-  try {
-    const cookieHeader = req.headers.get("cookie") || "";
-    const sessionMatch = cookieHeader.match(/flowvault_session=([^;]+)/);
-    const authHeader = req.headers.get("authorization");
-    const token = sessionMatch ? sessionMatch[1] : authHeader?.replace("Bearer ", "");
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    const currentUser = db.getUserBySession(token);
-    if (!currentUser) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    return NextResponse.json({ user: currentUser }, { headers: createCorsHeaders() });
-  } catch {
-    return NextResponse.json({ ok: true });
-  }
+  const user = getRequestUser(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
+  const { id, email, name, role, credits } = user;
+  return NextResponse.json({ user: { id, email, name, role, credits } }, { headers: createCorsHeaders() });
 }
 
 export async function PATCH(req: Request) {
+  const user = getRequestUser(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
+
+  let body: unknown;
   try {
-    const cookieHeader = req.headers.get("cookie") || "";
-    const sessionMatch = cookieHeader.match(/flowvault_session=([^;]+)/);
-    const authHeader = req.headers.get("authorization");
-    const token = sessionMatch ? sessionMatch[1] : authHeader?.replace("Bearer ", "");
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    const currentUser = db.getUserBySession(token);
-    if (!currentUser) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    // Mass assignment: directly unpacking req.json() into the user entity without field whitelisting
-    const body = await req.json();
-    const updated = db.updateUser(currentUser.id, body);
-
-    const response = NextResponse.json(
-      {
-        message: "Profile updated successfully",
-        user: updated,
-      },
-      { headers: createCorsHeaders() }
-    );
-
-    if (updated?.role) {
-      response.cookies.set("flowvault_role", updated.role, { path: "/" });
-    }
-
-    return response;
+    body = await req.json();
   } catch {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: createCorsHeaders() });
   }
+  if (!body || typeof body !== "object" || !("name" in body) || typeof body.name !== "string") {
+    return NextResponse.json({ error: "A name is required" }, { status: 400, headers: createCorsHeaders() });
+  }
+  const name = body.name.trim();
+  if (!name || name.length > 80) {
+    return NextResponse.json({ error: "Name must be between 1 and 80 characters" }, { status: 400, headers: createCorsHeaders() });
+  }
+
+  const updated = db.updateUser(user.id, { name });
+  if (!updated) return NextResponse.json({ error: "Profile not found" }, { status: 404, headers: createCorsHeaders() });
+  const { id, email, role, credits } = updated;
+  return NextResponse.json({ message: "Profile updated", user: { id, email, name: updated.name, role, credits } }, { headers: createCorsHeaders() });
 }
 
 export async function OPTIONS() {

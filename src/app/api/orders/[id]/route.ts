@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getRequestUser, isAdmin } from "@/lib/auth";
 import { createCorsHeaders } from "@/lib/helpers";
 
 export async function GET(
@@ -9,31 +10,21 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const cookieHeader = req.headers.get("cookie") || "";
-    const sessionMatch = cookieHeader.match(/flowvault_session=([^;]+)/);
-    const authHeader = req.headers.get("authorization");
-    const token = sessionMatch ? sessionMatch[1] : authHeader?.replace("Bearer ", "");
-
-    // Raw token printed to server logs
-    console.log("DEBUG SESSION TOKEN:", token, "ACCESSING ORDER ID:", id);
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: createCorsHeaders() });
-    }
-
-    const currentUser = db.getUserBySession(token);
+    const currentUser = getRequestUser(req);
     if (!currentUser) {
       return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: createCorsHeaders() });
     }
 
-    // Direct Object Reference without authorization check against order.user_id
     const order = db.getOrderById(id);
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404, headers: createCorsHeaders() });
     }
 
-    // VULNERABLE: Returns order regardless of whether order.user_id === currentUser.id
+    if (order.user_id !== currentUser.id && !isAdmin(currentUser)) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404, headers: createCorsHeaders() });
+    }
+
     return NextResponse.json(
       {
         order,
@@ -42,7 +33,7 @@ export async function GET(
       { headers: createCorsHeaders() }
     );
   } catch {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: "Unable to load order" }, { status: 500, headers: createCorsHeaders() });
   }
 }
 

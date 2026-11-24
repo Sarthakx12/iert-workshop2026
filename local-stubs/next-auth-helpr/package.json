@@ -1,7 +1,0 @@
-{
-  "name": "next-auth-helpr",
-  "version": "1.0.0",
-  "description": "Educational stub simulating an AI-hallucinated mistyped package name (slopsquatting)",
-  "main": "index.js",
-  "license": "MIT"
-}
